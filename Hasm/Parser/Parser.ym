@@ -1,0 +1,226 @@
+%{
+    #import "HAST.h"
+    
+#define load(x) (__bridge id)(x)
+#define save(x) (__bridge_retained void *)(x)
+%}
+
+%parse-param { HTree *tree }
+
+// symbols
+%token t_at t_plus t_minus t_equal t_semi t_and t_or t_not t_lparen t_rparen
+
+// mnemonics
+%token t_amnemonic t_dmnemonic t_mmnemonic t_mnemonics
+
+// id, number
+%token t_identifier t_number
+
+// End Of File
+%token t_eof
+
+// Jump
+%token t_jump
+
+// Other symbols
+%token t_unknown
+
+%start input
+
+%type <stringValue> t_identifier t_amnemonic t_dmnemonic t_mmnemonic t_mnemonics t_jump mnemonic lexpr
+%type <numberValue> t_number
+
+%type <expr> aexpr cexpr dest
+%type <expr> const_int_expr jump
+%type <expr> comp unary_expr binary_expr simple_expr mnemonic_expr
+
+%union {
+    void *stringValue;
+    __unsafe_unretained NSNumber *numberValue;
+    void *expr;
+}
+
+%%
+
+input: exprs
+;
+
+exprs:
+    | exprs cexpr {
+        id e = load($2);
+        [tree addExpression:e];
+    }
+    | exprs aexpr {
+        id e = load($2);
+        [tree addExpression:e];
+    }
+    | exprs lexpr
+;
+
+lexpr
+    : t_lparen t_identifier t_rparen {
+        [tree addLabel:(__bridge NSString *)$2];
+    }
+;
+
+aexpr
+    : t_at t_identifier {
+        id label = (__bridge id)$2;
+        id table = tree.symbolTable;
+        id number = table[label];
+        id e = nil;
+        if (number) {
+            e = [AExpr exprWithNumber:number];
+        } else {
+            e = [AExpr exprWithLabel:label];
+            [tree addUnresolvedExpression:e];
+        }
+        $$ = save(e);
+    }
+    | t_at t_number {
+        id e = [AExpr exprWithNumber:$2];
+        $$ = save(e);
+    }
+;
+
+cexpr
+    : dest t_equal comp t_semi jump {
+        id d = load($1);
+        id c = load($3);
+        id j = load($5);
+        id ce = [CExpr destination:d computation:c jump:j];
+        $$ = save(ce);
+    }
+    | dest t_equal comp {
+        id d = load($1);
+        id c = load($3);
+        id ce = [CExpr destination:d computation:c jump:nil];
+        $$ = save(ce);
+    }
+    | comp t_semi jump {
+        id c = load($1);
+        id j = load($3);
+        id ce = [CExpr destination:nil computation:c jump:j];
+        $$ = save(ce);
+    }
+    | comp {
+        id e = load($1);
+        id ce = [CExpr computation:e];
+        $$ = save(ce);
+    }
+    | '0' t_semi jump {
+        id e = load($3);
+        id ce = [CExpr jump:e];
+        $$ = save(ce);
+    }
+;
+
+dest: {
+        id e = [DestinationExpr new];
+        $$ = save(e);
+    }
+    | mnemonic {
+        id e = [DestinationExpr exprWithMnemonics:(__bridge NSString *)$1];
+        $$ = save(e);
+    }
+;
+
+mnemonic
+    : t_mnemonics {
+        $$ = $1;
+    }
+    | t_amnemonic {
+        $$ = $1;
+    }
+    | t_mmnemonic {
+        $$ = $1;
+    }
+    | t_dmnemonic {
+        $$ = $1;
+    }
+;
+
+// COMP
+
+comp
+    : unary_expr
+    | binary_expr
+    | simple_expr
+;
+
+unary_expr
+    : t_not simple_expr {
+        id se = load($2);
+        id e = [NotExpr exprWithMnemonic:se];
+        $$ = save(e);
+    }
+    | t_minus simple_expr {
+        id se = load($2);
+        id e = [NegativeExpr exprWithMnemonic:se];
+        $$ = save(e);
+    }
+;
+
+binary_expr
+    : simple_expr t_plus simple_expr {
+        id l = load($1);
+        id r = load($3);
+        id e = [SumExpr exprWithLHS:l RHS:r];
+        $$ = save(e);
+    }
+    | simple_expr t_minus simple_expr {
+        id l = load($1);
+        id r = load($3);
+        id e = [SubstractExpr exprWithLHS:l RHS:r];
+        $$ = save(e);
+    }
+    | simple_expr t_and simple_expr {
+        id l = load($1);
+        id r = load($3);
+        id e = [AndExpr exprWithLHS:l RHS:r];
+        $$ = save(e);
+    }
+    | simple_expr t_or simple_expr {
+        id l = load($1);
+        id r = load($3);
+        id e = [OrExpr exprWithLHS:l RHS:r];
+        $$ = save(e);
+    }
+;
+
+simple_expr
+    : mnemonic_expr
+    | const_int_expr
+;
+
+mnemonic_expr
+    : t_amnemonic {
+        id e = [MnemonicExpr exprWithMnemonic:(__bridge NSString *)$1];
+        $$ = save(e);
+    }
+    | t_dmnemonic {
+        id e = [MnemonicExpr exprWithMnemonic:(__bridge NSString *)$1];
+        $$ = save(e);
+    }
+    | t_mmnemonic {
+        id e = [MnemonicExpr exprWithMnemonic:(__bridge NSString *)$1];
+        $$ = save(e);
+    }
+;
+
+const_int_expr: t_number {
+        id num = $1;
+        id e = [ConstIntExpr exprWithConst:[num intValue]];
+        $$ = save(e);
+    }
+;
+
+// COMP END
+
+jump: t_jump {
+        id e = [JumpExpr exprWithJump:(__bridge NSString *)$1];
+        $$ = save(e);
+    }
+;
+
+%%

@@ -1,0 +1,140 @@
+%{
+    #import <Foundation/Foundation.h>
+    #include "y.tab.h"
+%}
+
+%option noyywrap
+%option nodefault
+%option yylineno
+%option noinput
+%option nounput
+
+NUMBER      [0-9]+
+IDENTIFIER  [A-Za-z0-9_.$]+
+
+JUMP        ("JGT"|"JEQ"|"JGE"|"JLT"|"JNE"|"JLE"|"JMP")
+
+L_PAREN     \(
+R_PAREN     \)
+
+WHITESPACE  [\t ]
+NEWLINE     [\n\r]
+AT          [@]
+SEMI        [;]
+EQUAL       [=]
+PLUS        [+]
+MINUS       [-]
+AND         [&]
+OR          [|]
+NOT         [!]
+A_MNEM      [A]
+D_MNEM      [D]
+M_MNEM      [M]
+MNEMONICS   [AMD]+
+COMMENT     "//"
+
+%x COMMENT_COND
+
+%%
+
+{COMMENT} {
+    BEGIN(COMMENT_COND);
+}
+
+<COMMENT_COND>. {}
+
+<COMMENT_COND>{NEWLINE} {
+    BEGIN(INITIAL);
+}
+
+<COMMENT_COND><<EOF>> {
+    BEGIN(INITIAL);
+}
+
+{A_MNEM} {
+    yylval.stringValue = CFBridgingRetain([@(yytext) copy]);
+    return t_amnemonic;
+}
+
+{D_MNEM} {
+    yylval.stringValue = CFBridgingRetain([@(yytext) copy]);
+    return t_dmnemonic;
+}
+
+{M_MNEM} {
+    yylval.stringValue = CFBridgingRetain([@(yytext) copy]);
+    return t_mmnemonic;
+}
+
+{AT} {
+    return t_at;
+}
+
+{SEMI} {
+    return t_semi;
+}
+
+{NUMBER} {
+    yylval.numberValue = @(@(yytext).intValue);
+    return t_number;
+}
+
+{L_PAREN} {
+    return t_lparen;
+}
+
+{R_PAREN} {
+    return t_rparen;
+}
+
+{PLUS} {
+    return t_plus;
+}
+
+{MINUS} {
+    return t_minus;
+}
+
+{AND} {
+    return t_and;
+}
+
+{OR} {
+    return t_or;
+}
+
+{NOT} {
+    return t_not;
+}
+
+{EQUAL} {
+    return t_equal;
+}
+
+{WHITESPACE} {}
+{NEWLINE} {}
+
+{JUMP} {
+    yylval.stringValue = CFBridgingRetain(@(yytext).copy);
+    return t_jump;
+}
+
+{MNEMONICS} {
+    yylval.stringValue = CFBridgingRetain(@(yytext).copy);
+    return t_mnemonics;
+}
+
+{IDENTIFIER} {
+    yylval.stringValue = CFBridgingRetain(@(yytext).copy);
+    return t_identifier;
+}
+
+. {
+    return t_unknown;
+}
+
+<<EOF>> {
+    return 0;
+}
+
+%%
